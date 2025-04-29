@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import StarsRate from './StarsRate'
+import StarsRate from './components/StarsRate'
+import ErrorMessage from "./components/ErrorMessage";
+import Loader from "./components/Loader";
 
 const API_KEY = 'dfcc31ea';
 
@@ -59,6 +61,11 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
+
+  function handleSelectFilm(id){
+    setSelectedId(prevId => prevId === id ? null : id)
+  }
 
   useEffect(()=>{
     async function fetchMovies() {
@@ -99,14 +106,17 @@ export default function App() {
       </Nav>
       <Main>
         <Box>
-          {!isLoading && !error && <MoviesList movies={movies}/>}
+          {!isLoading && !error && <MoviesList movies={movies} onHandleSelectFilm={handleSelectFilm}/>}
           {isLoading && <Loader/>}
           {error && <ErrorMessage message={error}/>}
         </Box>
         <Box>
-          <WatchedMoviesList watched={watched}/>
-          <StarsRate maxRate={10} size={20}/>
-          <StarsRate size={23} color='red'/>
+          {selectedId 
+            ? <MovieDetails selectedId={selectedId} onHandleSelectFilm={handleSelectFilm}/>
+            : <WatchedMoviesList watched={watched}/>
+          }
+          {/* <StarsRate maxRate={10} size={20}/>
+          <StarsRate size={23} color='red'/> */}
         </Box>
       </Main>      
     </>
@@ -127,8 +137,7 @@ function Nav({children}){
 function Logo(){
   return(
     <div className="logo">
-      <span role="img">🍿</span>
-      <h1>usePopcorn</h1>
+      <h1>Cinema React</h1>
     </div>
   )
 }
@@ -177,19 +186,19 @@ function Box({children}){
   )
 }
 
-function MoviesList({movies}){
+function MoviesList({movies, onHandleSelectFilm}){
   return(
-    <ul className="list">
+    <ul className="list list-movies">
       {movies?.map((movie) => (
-        <MoviesListMovie movie={movie} key={movie.imdbID}/>
+        <MoviesListMovie movie={movie} key={movie.imdbID} onHandleSelectFilm={onHandleSelectFilm}/>
       ))}
     </ul>
   )
 }
 
-function MoviesListMovie({movie}){
+function MoviesListMovie({movie, onHandleSelectFilm}){
   return(
-    <li>
+    <li onClick={()=> onHandleSelectFilm(movie.imdbID)}>
       <img src={movie.Poster} alt={`${movie.Title} poster`} />
       <h3>{movie.Title}</h3>
       <div>
@@ -199,6 +208,75 @@ function MoviesListMovie({movie}){
         </p>
       </div>
     </li>
+  )
+}
+
+function MovieDetails({selectedId, onHandleSelectFilm}){
+  const [movie, setMovie] = useState({})
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(()=>{
+    async function getMovie() {
+      try {
+        setIsLoading(true)
+        const res = await fetch(`http://www.omdbapi.com/?apikey=${API_KEY}&i=${selectedId}`)
+       
+        if (!res.ok) throw new Error('Bad Request')
+
+        const data = await res.json()        
+        setMovie(data)
+        setIsLoading(false)
+      } catch (error) {
+        
+      }
+      
+    }
+
+    getMovie()
+  }, [selectedId])
+
+  return (
+    <div className="details">
+      {isLoading 
+        ? <Loader/> 
+        : <>
+          <header>
+            <button className="btn-back" onClick={onHandleSelectFilm(selectedId)}>
+              &larr;
+            </button>
+            <img src={movie['Poster']} alt={`Poster of ${movie['Title']} movie`} />
+            <div className="details-overview">
+              <h2>{movie['Title']}</h2>
+              <p>
+                {movie['Released']} &bull; {movie['Runtime']}
+              </p>
+              <p>{movie['Genre']}</p>
+              <p>
+                <span>⭐️</span>
+                {movie['imdbRating']} IMDb rating
+              </p>
+            </div>
+          </header>
+          <section>
+            <div className="rating">
+              <StarsRate 
+                key={movie['Title']}
+                maxRate={10} 
+                size={24} 
+                defaultRate={
+                  movie?.imdbRating && movie.imdbRating !== 'N/A'
+                    ? Number(movie.imdbRating.slice(0, 1))
+                    : 0
+                }/>
+            </div>
+            <p>
+              <em>{movie['Plot']}</em>
+            </p>
+            <p>Starring {movie['Actors']}</p>
+            <p>Directed by {movie['Director']}</p>
+          </section>
+      </>}
+    </div>
   )
 }
 
@@ -266,12 +344,4 @@ function WatchedMoviesListMovie({movie}){
       </div>
     </li>
   )
-}
-
-function Loader(){
-  return <p className="loader">Loading...</p>
-}
-
-function ErrorMessage({message}){
-  return <p className="error">{message}</p>
 }
